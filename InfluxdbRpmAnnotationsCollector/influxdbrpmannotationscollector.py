@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Uses rpm -qa and additional rpm -qi <package_name> to abstract name,version,release.
+Uses rpm -qa and rpmUtils.miscutils abstract name,version,release.
 Pushes three different title types 'NEW,REMOVED,CHANGED', which are all sent in one message.
 Used for rpm annotations querying on influxdb/grafana.
 Does not used inherited publish command from diamond.collector.Collector
@@ -16,7 +16,7 @@ Must have read/write access to specified save_file
 """
 try:
     import subprocess
-    import re
+    import rpmUtils.miscutils as rpm_utils
     import os
     from influxdb import client as influxdb
     import diamond.collector
@@ -111,36 +111,16 @@ class InfluxdbRpmAnnotationsCollector(diamond.collector.Collector):
         else:
             self.log.error("stderr reported from rpm query all")
 
+
         for rpm in rpm_list.stdout:
             rpm_stripped = rpm.rstrip()
+            (name, version, release, epoch,arch) = rpm_utils.splitFilename(rpm_stripped)
 
-            rpm_qi_command = [
-                self.config['rpm_binary_location'], "-qi", rpm_stripped]
-
-            try:
-                rpm_info = subprocess.Popen(
-                    rpm_qi_command, stdout=subprocess.PIPE)
-            except ValueError as err:
-                self.log.error("Invalid arguments provided to rpm query info")
-            except OSError as err:
-                self.log.error(
-                    "OSError while perfoming rpm query info, may have invalid arguments or locations")
-
-            name_line = rpm_info.stdout.readline()
-            version_line = rpm_info.stdout.readline()
-            release_line = rpm_info.stdout.readline()
-
-            name_re = re.match("(?:Name\s*\:\s)([\w\-]+)", name_line, re.I)
-            version_re = re.match(
-                "(?:Version\s*\:\s)([0-9\.]+)", version_line, re.I)
-            release_re = re.match(
-                "(?:Release\s*\:\s)([\w\.]+)", release_line, re.I)
-
-            if (name_re and version_re and release_re):
-                rpm_dict[name_re.group(1)] = "{0}-{1}".format(
-                    version_re.group(1), release_re.group(1))  # [version_re.group(1),release_re.group(1)]
+            if (name and version and release):
+                rpm_dict[name] = "{0}-{1}".format(
+                    version, release) 
             else:
-                pass
+                pass          
 
         return rpm_dict
 
